@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+* {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: #F7F8FA;
+}
