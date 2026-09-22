@@ -6,5 +6,19 @@
 }
 
 body {
-  background-color: #F7F8FA;
+  background-color: #FAFAF9;
+}
+
+::selection {
+  background-color: #1c1917;
+  color: #fff;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.2s ease-out;
 }
