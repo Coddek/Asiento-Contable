@@ -1,6 +1,6 @@
-# Cuentas Zapatillas
+# Asiento Contable
 
-Cuenta corriente digital para un negocio de reventa de zapatillas: reemplaza el cuaderno donde se anota quién debe y quién pagó. Cada cliente tiene un saldo calculado a partir de sus movimientos (fía / paga), con login y datos aislados por usuario mediante Row Level Security de Supabase.
+Cuenta corriente digital para un negocio de reventa de zapatillas: reemplaza el cuaderno donde se anota quién debe y quién pagó. Cada cliente tiene un saldo calculado a partir de sus movimientos (fía / paga), con login propio y datos aislados por usuario mediante Row Level Security de Supabase.
 
 **Demo en vivo:** https://asiento-contable.vercel.app
 
@@ -8,11 +8,10 @@ Cuenta corriente digital para un negocio de reventa de zapatillas: reemplaza el 
 
 - Login y registro de usuarios (Supabase Auth)
 - Alta de clientes, con búsqueda por nombre
-- Carga de movimientos (debe / haber) por cliente, con concepto y fecha
+- Carga, edición y borrado de movimientos (debe / haber) por cliente, con referencia y fecha
 - Cálculo automático de saldo por cliente y saldo total a cobrar
-- Filtro de movimientos por rango de fechas
+- Filtro de movimientos por rango de fechas, con paginación ("Cargar más")
 - Indicador de antigüedad de deuda (días desde el último débito)
-- Edición y borrado de clientes y movimientos
 - Datos aislados por usuario: cada cuenta ve solo sus propios clientes (RLS)
 
 ## Stack
@@ -35,8 +34,8 @@ cp .env.example .env   # completar con tu proyecto de Supabase
 npm run dev
 ```
 
-Necesitás un proyecto de Supabase con dos tablas: `clientes` (con `owner_id` referenciando al usuario) y `movimientos` (con `cliente_id`, `debe`, `haber`, `fecha`, `concepto`), y políticas RLS que filtren por `owner_id = auth.uid()`.
+Necesitás un proyecto de Supabase con dos tablas: `clientes` (con `owner_id` referenciando al usuario) y `movimientos` (con `cliente_id`, `debe`, `haber`, `fecha`, `referencia`), y políticas RLS que filtren por `owner_id = auth.uid()`.
 
 ## Estado del proyecto
 
-Funcional end-to-end: login, alta de clientes, carga y edición de movimientos, cálculo de saldos, deploy en producción. Pendiente: tests automatizados, y unificar estilos (parte de la UI usa Tailwind, otra parte usa estilos inline — ambos funcionan, pero no está unificado todavía).
+Funcional end-to-end: login, alta de clientes, carga y edición de movimientos, cálculo de saldos, deploy en producción. Pendiente: tests automatizados.
