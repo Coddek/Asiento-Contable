@@ -3,43 +3,21 @@ import { supabase } from '../lib/supabase'
 import ClienteDetalle from './ClienteDetalle'
 import Toast from './Toast'
 import Spinner from './Spinner'
+import Hoja from './Hoja'
+import MarcaT from './MarcaT'
+import ErrorCarga from './ErrorCarga'
 import { useToast } from '../hooks/useToast'
 import { diasHasta, hoyArgentina, formatPesos } from '../lib/fecha'
+import { mensajeError } from '../lib/errores'
 
-const COLORES_AVATAR = [
-  'bg-rose-100 text-rose-700',
-  'bg-amber-100 text-amber-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-sky-100 text-sky-700',
-  'bg-violet-100 text-violet-700',
-  'bg-orange-100 text-orange-700',
-]
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
-function colorAvatar(nombre) {
-  const suma = nombre.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-  return COLORES_AVATAR[suma % COLORES_AVATAR.length]
-}
+const campo =
+  'w-full bg-hoja border border-renglon rounded-2xl px-4 py-3.5 text-[16px] outline-none placeholder:text-tinta-tenue focus:border-tinta focus-visible:outline-none focus:ring-1 focus:ring-tinta'
 
-function iniciales(nombre) {
-  const partes = nombre.trim().split(/\s+/)
-  return ((partes[0]?.[0] || '') + (partes[1]?.[0] || '')).toUpperCase()
-}
-
-function diasDesdeUltimoDebito(movimientos) {
-  const debitos = movimientos
-    .filter(m => Number(m.debe) > 0)
-    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
-  if (debitos.length === 0) return null
-  return diasHasta(debitos[0].fecha)
-}
-
-function AgingBadge({ dias }) {
-  if (dias === null) return null
-  const estilos =
-    dias <= 7 ? 'bg-emerald-50 text-emerald-700' :
-    dias <= 30 ? 'bg-amber-50 text-amber-700' :
-    'bg-rose-50 text-rose-700'
-  return <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${estilos}`}>{dias}d</span>
+function diasDesdeUltimoDebe(movimientos) {
+  const fechas = movimientos.filter((m) => Number(m.debe) > 0).map((m) => m.fecha).sort()
+  return fechas.length ? diasHasta(fechas[fechas.length - 1]) : null
 }
 
 function mesAnterior(mes) {
@@ -47,6 +25,7 @@ function mesAnterior(mes) {
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
 }
 
+// Total del Debe y del Haber de todos los clientes en un mes.
 function totalesDelMes(clientes, mes) {
   let debe = 0
   let haber = 0
@@ -60,15 +39,27 @@ function totalesDelMes(clientes, mes) {
   return { debe, haber }
 }
 
-function SkeletonRow() {
+// Antigüedad de la deuda en palabras, con un punto de color según urgencia.
+function Antiguedad({ dias }) {
+  if (dias === null) return null
+  const color = dias > 30 ? 'bg-debe' : dias > 7 ? 'bg-aviso' : 'bg-haber'
+  const texto = dias === 0 ? 'Último Debe hoy' : dias === 1 ? 'Último Debe ayer' : `Último Debe hace ${dias} días`
   return (
-    <div className="px-5 py-4 flex items-center gap-3 animate-pulse">
-      <div className="h-9 w-9 rounded-full bg-stone-100 shrink-0" />
-      <div className="flex-1">
-        <div className="h-3.5 w-32 bg-stone-100 rounded mb-2" />
-        <div className="h-3 w-20 bg-stone-100 rounded" />
+    <span className="flex items-center gap-1.5 text-[13px] text-tinta-tenue">
+      <span className={`h-2 w-2 rounded-full ${color}`} aria-hidden="true" />
+      {texto}
+    </span>
+  )
+}
+
+function FilaEsqueleto() {
+  return (
+    <div className="px-4 py-4 flex items-center justify-between animate-pulse">
+      <div>
+        <div className="h-4 w-36 bg-renglon-suave rounded mb-2" />
+        <div className="h-3 w-24 bg-renglon-suave rounded" />
       </div>
-      <div className="h-4 w-16 bg-stone-100 rounded" />
+      <div className="h-5 w-20 bg-renglon-suave rounded" />
     </div>
   )
 }
@@ -76,6 +67,7 @@ function SkeletonRow() {
 export default function Dashboard({ session }) {
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
+  const [errorCarga, setErrorCarga] = useState('')
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
   const [modalNuevo, setModalNuevo] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
@@ -92,16 +84,19 @@ export default function Dashboard({ session }) {
 
   async function fetchClientes() {
     setLoading(true)
+    setErrorCarga('')
     const { data, error } = await supabase
       .from('clientes')
       .select(`id, nombre, telefono, notas, movimientos (debe, haber, fecha)`)
       .order('nombre')
 
-    if (!error) {
-      const conSaldo = data.map(c => ({
+    if (error) {
+      setErrorCarga(mensajeError(error, 'No se pudieron cargar los clientes.'))
+    } else {
+      const conSaldo = data.map((c) => ({
         ...c,
         saldo: c.movimientos.reduce((acc, m) => acc + Number(m.debe) - Number(m.haber), 0),
-        diasDeuda: diasDesdeUltimoDebito(c.movimientos)
+        diasDeuda: diasDesdeUltimoDebe(c.movimientos),
       }))
       conSaldo.sort((a, b) => b.saldo - a.saldo)
       setClientes(conSaldo)
@@ -119,25 +114,28 @@ export default function Dashboard({ session }) {
       nombre: nuevoNombre.trim(),
       telefono: nuevoTelefono.trim() || null,
       notas: nuevasNotas.trim() || null,
-      owner_id: session.user.id
+      owner_id: session.user.id,
     })
+    setGuardando(false)
 
     if (error) {
-      setErrorForm('No se pudo guardar el cliente. Probá de nuevo.')
-      setGuardando(false)
+      setErrorForm(mensajeError(error, 'No se pudo guardar el cliente. Probá de nuevo.'))
       return
     }
 
     setNuevoNombre(''); setNuevoTelefono(''); setNuevasNotas('')
     setModalNuevo(false)
-    setGuardando(false)
-    showToast('Cliente creado')
+    showToast('Cliente guardado')
     fetchClientes()
   }
 
   async function handleLogout() {
     setSaliendo(true)
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      setSaliendo(false)
+      showToast(mensajeError(error, 'No se pudo cerrar la sesión. Probá de nuevo.'), 'error')
+    }
   }
 
   if (clienteSeleccionado) {
@@ -145,27 +143,32 @@ export default function Dashboard({ session }) {
   }
 
   const filtrados = clientes
-    .filter(c => c.nombre.toLowerCase().includes(busqueda.toLowerCase()))
-    .filter(c => tab === 'deben' ? c.saldo > 0 : c.saldo <= 0)
+    .filter((c) => c.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+    .filter((c) => (tab === 'deben' ? c.saldo > 0 : c.saldo <= 0))
 
-  const totalDeben = clientes.filter(c => c.saldo > 0).length
-  const totalSaldados = clientes.filter(c => c.saldo <= 0).length
-  const montoTotal = clientes.filter(c => c.saldo > 0).reduce((acc, c) => acc + c.saldo, 0)
+  const totalDeben = clientes.filter((c) => c.saldo > 0).length
+  const totalSaldados = clientes.filter((c) => c.saldo <= 0).length
+  const montoTotal = clientes.filter((c) => c.saldo > 0).reduce((acc, c) => acc + c.saldo, 0)
   const mesActual = hoyArgentina().slice(0, 7)
-  const esteMes = totalesDelMes(clientes, mesActual)
-  const mesPasado = totalesDelMes(clientes, mesAnterior(mesActual))
+  const mesPasado = mesAnterior(mesActual)
+  const meses = [
+    [MESES[Number(mesActual.slice(5)) - 1], totalesDelMes(clientes, mesActual)],
+    [MESES[Number(mesPasado.slice(5)) - 1], totalesDelMes(clientes, mesPasado)],
+  ]
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9]">
-      {/* Header */}
-      <header className="bg-white border-b border-stone-200 px-6 h-14 flex items-center justify-between sticky top-0 z-10">
-        <span className="font-semibold text-[15px] text-stone-900 tracking-tight">Asiento Contable</span>
+    <div className="min-h-dvh pb-28">
+      <header className="px-5 h-16 flex items-center justify-between max-w-2xl mx-auto">
+        <span className="flex items-center gap-2.5 font-titulo text-[18px] font-semibold tracking-tight">
+          <MarcaT className="h-7 w-7" />
+          Asiento Contable
+        </span>
         <div className="flex items-center gap-4">
-          <span className="hidden sm:inline text-[13px] text-stone-400">{session.user.email}</span>
+          <span className="hidden sm:inline text-[13px] text-tinta-tenue">{session.user.email}</span>
           <button
             onClick={handleLogout}
             disabled={saliendo}
-            className="text-[13px] text-stone-500 hover:text-stone-900 disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+            className="text-[15px] text-tinta-suave hover:text-tinta disabled:opacity-50 flex items-center gap-1.5 py-2"
           >
             {saliendo && <Spinner className="w-3.5 h-3.5" />}
             {saliendo ? 'Saliendo...' : 'Salir'}
@@ -173,172 +176,157 @@ export default function Dashboard({ session }) {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-5 py-8 pb-14">
-        {/* Resumen (sin caja, header editorial) */}
-        <div className="flex items-end justify-between mb-7 pb-6 border-b border-stone-200">
-          <div>
-            <p className="text-xs text-stone-400 font-medium mb-1.5 uppercase tracking-wide">Total a cobrar</p>
-            <p className="text-[40px] font-semibold text-stone-900 tracking-tight leading-none">
-              ${montoTotal.toLocaleString('es-AR')}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-stone-600 font-medium">{totalDeben} {totalDeben === 1 ? 'cliente debe' : 'clientes deben'}</p>
-            <p className="text-sm text-stone-400">{totalSaldados} {totalSaldados === 1 ? 'saldado' : 'saldados'}</p>
-          </div>
-        </div>
-
-        {!loading && (
-          <div className="grid grid-cols-2 gap-3 mb-7 -mt-2">
-            {[['Este mes', esteMes], ['Mes pasado', mesPasado]].map(([titulo, t]) => (
-              <div key={titulo} className="bg-white border border-stone-200 rounded-2xl px-4 py-3">
-                <p className="text-[11px] text-stone-400 font-medium uppercase tracking-wide mb-1.5">{titulo}</p>
-                <p className="text-sm text-stone-600 flex justify-between gap-2">
-                  <span>Debe</span><span className="font-semibold text-rose-600">{formatPesos(t.debe)}</span>
-                </p>
-                <p className="text-sm text-stone-600 flex justify-between gap-2">
-                  <span>Haber</span><span className="font-semibold text-emerald-600">{formatPesos(t.haber)}</span>
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Buscador + tabs + nuevo */}
-        <div className="flex gap-2 mb-5 items-center flex-wrap">
-          <div className="relative flex-1 min-w-[160px]">
-            <svg className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Buscar cliente..."
-              value={busqueda}
-              onChange={e => setBusqueda(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-stone-200 rounded-full text-sm outline-none bg-white text-stone-900 transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300"
-            />
-          </div>
-          <div className="flex bg-stone-100 rounded-full p-[3px]">
-            {[['deben', `Deben (${totalDeben})`], ['saldados', `Saldados (${totalSaldados})`]].map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-colors ${
-                  tab === key ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => { setModalNuevo(true); setErrorForm('') }}
-            className="bg-stone-900 text-white rounded-full px-5 py-2.5 text-[13px] font-medium hover:bg-stone-800 active:scale-[0.97] transition-all whitespace-nowrap"
-          >
-            + Nuevo
-          </button>
-        </div>
-
-        {/* Lista plana con separadores */}
-        {loading ? (
-          <div className="bg-white border border-stone-200 rounded-2xl divide-y divide-stone-100 overflow-hidden">
-            <SkeletonRow /><SkeletonRow /><SkeletonRow />
-          </div>
-        ) : filtrados.length === 0 ? (
-          <div className="text-center py-16">
-            <svg className="mx-auto mb-3 text-stone-300" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-              <path d="M17 20h5v-2a4 4 0 0 0-4-4h-1M9 20H4v-2a4 4 0 0 1 4-4h1m0-4a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 0a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
-            </svg>
-            <p className="text-stone-400 text-sm">
-              {busqueda ? `Sin resultados para "${busqueda}"` : tab === 'deben' ? 'Ningún cliente debe.' : 'Ningún cliente saldado.'}
-            </p>
-          </div>
+      <main className="max-w-2xl mx-auto px-5">
+        {errorCarga ? (
+          <div className="mt-6"><ErrorCarga mensaje={errorCarga} onReintentar={fetchClientes} /></div>
         ) : (
-          <div className="bg-white border border-stone-200 rounded-2xl divide-y divide-stone-100 overflow-hidden">
-            {filtrados.map(c => (
-              <div
-                key={c.id}
-                onClick={() => setClienteSeleccionado(c)}
-                className="group px-5 py-4 flex items-center gap-3 hover:bg-stone-50 transition-colors cursor-pointer"
-              >
-                <div className={`h-9 w-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${colorAvatar(c.nombre)}`}>
-                  {iniciales(c.nombre)}
+          <>
+            {/* Lo primero: cuánto te deben en total */}
+            <section className="pt-4 pb-6">
+              <p className="text-[16px] text-tinta-suave">Te deben</p>
+              <p className="font-titulo cifras text-[52px] leading-[1.05] font-semibold tracking-tight text-debe">
+                {loading ? <span className="text-renglon">$—</span> : formatPesos(montoTotal)}
+              </p>
+              {!loading && (
+                <p className="text-[15px] text-tinta-suave mt-1">
+                  {totalDeben === 0
+                    ? 'Nadie te debe nada.'
+                    : `${totalDeben} ${totalDeben === 1 ? 'cliente con saldo' : 'clientes con saldo'} pendiente`}
+                </p>
+              )}
+            </section>
+
+            {/* El mes como una pequeña cuenta T: Debe a la izquierda, Haber a la derecha */}
+            {!loading && (
+              <section aria-label="Debe y Haber por mes" className="bg-hoja rounded-2xl border border-renglon mb-6">
+                <div className="grid grid-cols-[1fr_auto_auto] text-[15px]">
+                  <span />
+                  <span className="px-4 pt-3 pb-2 text-right text-[13px] text-tinta-tenue border-b-2 border-tinta">Debe</span>
+                  <span className="px-4 pt-3 pb-2 text-right text-[13px] text-tinta-tenue border-b-2 border-l-2 border-tinta">Haber</span>
+                  {meses.map(([nombre, t], i) => (
+                    <div key={nombre} className="contents">
+                      <span className={`pl-4 py-2.5 ${i === 0 ? 'font-medium' : 'text-tinta-suave'}`}>{nombre}</span>
+                      <span className="cifras px-4 py-2.5 text-right text-debe">{formatPesos(t.debe)}</span>
+                      <span className="cifras px-4 py-2.5 text-right text-haber border-l-2 border-tinta">{formatPesos(t.haber)}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-stone-900 truncate">{c.nombre}</p>
-                    <AgingBadge dias={c.diasDeuda} />
-                  </div>
-                  {c.telefono && <p className="text-sm text-stone-400">{c.telefono}</p>}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-right">
-                    <p className={`font-semibold text-base whitespace-nowrap ${c.saldo > 0 ? 'text-rose-600' : c.saldo < 0 ? 'text-emerald-600' : 'text-stone-400'}`}>
-                      ${Math.abs(c.saldo).toLocaleString('es-AR')}
-                    </p>
-                    <p className="text-xs text-stone-400">
-                      {c.saldo > 0 ? 'debe' : c.saldo < 0 ? 'a favor' : 'saldado'}
-                    </p>
-                  </div>
-                </div>
+              </section>
+            )}
+
+            {/* Buscador + pestañas */}
+            <div className="flex flex-col gap-3 mb-4">
+              <input
+                type="search"
+                placeholder="Buscar cliente"
+                aria-label="Buscar cliente"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className={campo}
+              />
+              <div role="tablist" className="grid grid-cols-2 bg-renglon-suave rounded-2xl p-1">
+                {[['deben', `Deben (${totalDeben})`], ['saldados', `Saldados (${totalSaldados})`]].map(([key, label]) => (
+                  <button
+                    key={key}
+                    role="tab"
+                    aria-selected={tab === key}
+                    onClick={() => setTab(key)}
+                    className={`py-2.5 text-[15px] rounded-xl ${tab === key ? 'bg-hoja font-medium shadow-sm' : 'text-tinta-suave'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+
+            {/* Lista de clientes, en renglones */}
+            {loading ? (
+              <div className="bg-hoja rounded-2xl border border-renglon divide-y divide-renglon-suave">
+                <FilaEsqueleto /><FilaEsqueleto /><FilaEsqueleto />
+              </div>
+            ) : filtrados.length === 0 ? (
+              <p className="text-center text-[15px] text-tinta-suave py-12 px-6">
+                {busqueda
+                  ? `No hay clientes que coincidan con "${busqueda}".`
+                  : clientes.length === 0
+                    ? 'Todavía no cargaste clientes. Tocá "Nuevo cliente" para empezar.'
+                    : tab === 'deben' ? 'Ningún cliente te debe.' : 'No hay clientes saldados.'}
+              </p>
+            ) : (
+              <ul className="bg-hoja rounded-2xl border border-renglon divide-y divide-renglon-suave overflow-hidden">
+                {filtrados.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => setClienteSeleccionado(c)}
+                      className="w-full text-left px-4 py-4 flex items-center justify-between gap-3 hover:bg-papel active:bg-papel"
+                    >
+                      <span className="min-w-0 flex flex-col gap-1">
+                        <span className="text-[17px] font-medium truncate">{c.nombre}</span>
+                        {c.saldo > 0 ? <Antiguedad dias={c.diasDeuda} /> : c.telefono && <span className="text-[13px] text-tinta-tenue">{c.telefono}</span>}
+                      </span>
+                      <span className="text-right shrink-0">
+                        <span className={`block font-titulo cifras text-[19px] font-semibold ${c.saldo > 0 ? 'text-debe' : c.saldo < 0 ? 'text-haber' : 'text-tinta-tenue'}`}>
+                          {formatPesos(Math.abs(c.saldo))}
+                        </span>
+                        <span className="block text-[13px] text-tinta-tenue">
+                          {c.saldo > 0 ? 'debe' : c.saldo < 0 ? 'a favor' : 'al día'}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </main>
 
-      {/* Modal nuevo cliente */}
-      {modalNuevo && (
-        <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center px-4 z-50">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm">
-            <h3 className="font-semibold text-stone-900 mb-4">Nuevo cliente</h3>
-            <form onSubmit={crearCliente} className="flex flex-col gap-3">
-              <input
-                type="text"
-                placeholder="Nombre *"
-                value={nuevoNombre}
-                onChange={e => setNuevoNombre(e.target.value)}
-                required
-                className="border border-stone-200 rounded-2xl px-4 py-3 text-sm outline-none transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300"
-              />
-              <input
-                type="tel"
-                placeholder="Teléfono (opcional)"
-                value={nuevoTelefono}
-                onChange={e => setNuevoTelefono(e.target.value)}
-                className="border border-stone-200 rounded-2xl px-4 py-3 text-sm outline-none transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300"
-              />
-
-              <textarea
-                placeholder="Notas (opcional)"
-                value={nuevasNotas}
-                onChange={e => setNuevasNotas(e.target.value)}
-                rows={2}
-                className="border border-stone-200 rounded-2xl px-4 py-3 text-sm outline-none resize-none transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300"
-              />
-
-              {errorForm && <p className="text-rose-600 text-sm">{errorForm}</p>}
-
-              <div className="flex gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => setModalNuevo(false)}
-                  className="flex-1 border border-stone-200 text-stone-600 rounded-full py-3 text-sm font-medium hover:bg-stone-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={guardando}
-                  className="flex-1 bg-stone-900 text-white rounded-full py-3 text-sm font-medium hover:bg-stone-800 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                >
-                  {guardando && <Spinner />}
-                  {guardando ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            </form>
-          </div>
+      {/* Acción principal, al alcance del pulgar */}
+      <div className="fixed bottom-0 inset-x-0 bg-gradient-to-t from-papel via-papel to-transparent pt-6 pb-[max(1rem,env(safe-area-inset-bottom))] px-5">
+        <div className="max-w-2xl mx-auto">
+          <button
+            onClick={() => { setModalNuevo(true); setErrorForm('') }}
+            className="w-full bg-tinta text-white rounded-2xl py-4 text-[16px] font-medium shadow-lg shadow-tinta/20 hover:brightness-125"
+          >
+            Nuevo cliente
+          </button>
         </div>
+      </div>
+
+      {modalNuevo && (
+        <Hoja titulo="Nuevo cliente" onCerrar={() => setModalNuevo(false)}>
+          <form onSubmit={crearCliente} className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1.5 text-sm text-tinta-suave">
+              Nombre
+              <input type="text" value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} required autoFocus className={campo} />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm text-tinta-suave">
+              Teléfono (opcional)
+              <input type="tel" value={nuevoTelefono} onChange={(e) => setNuevoTelefono(e.target.value)} className={campo} />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm text-tinta-suave">
+              Notas (opcional)
+              <textarea
+                placeholder="Ej: paga a fin de mes"
+                value={nuevasNotas}
+                onChange={(e) => setNuevasNotas(e.target.value)}
+                rows={2}
+                className={`${campo} resize-none`}
+              />
+            </label>
+
+            {errorForm && <p role="alert" className="text-sm text-debe bg-debe-claro rounded-xl px-3.5 py-2.5">{errorForm}</p>}
+
+            <button
+              type="submit"
+              disabled={guardando}
+              className="mt-1 bg-tinta text-white rounded-2xl py-4 text-[16px] font-medium hover:brightness-125 disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {guardando && <Spinner />}
+              {guardando ? 'Guardando...' : 'Guardar cliente'}
+            </button>
+          </form>
+        </Hoja>
       )}
 
       <Toast toast={toast} />

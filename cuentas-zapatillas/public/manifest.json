@@ -1,11 +1,11 @@
 {
   "name": "Asiento Contable",
   "short_name": "Asiento",
-  "description": "Cuenta corriente de clientes: quién debe y quién pagó",
+  "description": "Las cuentas corrientes de tus clientes: quién te debe y cuánto",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAFAF9",
-  "theme_color": "#FAFAF9",
+  "background_color": "#F2F5F3",
+  "theme_color": "#F2F5F3",
   "icons": [
     {
       "src": "/icon-192.png",

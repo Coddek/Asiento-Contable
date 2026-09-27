@@ -22,7 +22,7 @@ function App() {
     }
   }, [])
 
-  if (loading) return null
+  if (loading) return <div className="min-h-dvh" />
 
   return session ? <Dashboard session={session} /> : <Login />
 }
