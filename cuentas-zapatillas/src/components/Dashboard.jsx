@@ -39,15 +39,28 @@ function totalesDelMes(clientes, mes) {
   return { debe, haber }
 }
 
-// Antigüedad de la deuda en palabras, con un punto de color según urgencia.
+// Antigüedad de la deuda: etiqueta gris (hasta 7 días), ámbar (hasta 30) o
+// roja con "!" y en negrita (más de 30). El color nunca es lo único que la
+// distingue: cambian también el fondo, el peso y el ícono.
 function Antiguedad({ dias }) {
   if (dias === null) return null
-  const color = dias > 30 ? 'bg-debe' : dias > 7 ? 'bg-aviso' : 'bg-haber'
-  const texto = dias === 0 ? 'Último Debe hoy' : dias === 1 ? 'Último Debe ayer' : `Último Debe hace ${dias} días`
+  const cuando = dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`
+  const atrasada = dias > 30
+  const estilo = atrasada
+    ? 'bg-debe-claro text-debe font-semibold'
+    : dias > 7
+      ? 'bg-aviso-claro text-aviso font-medium'
+      : 'bg-renglon-suave text-tinta-suave'
   return (
     <span className="flex items-center gap-1.5 text-[13px] text-tinta-tenue">
-      <span className={`h-2 w-2 rounded-full ${color}`} aria-hidden="true" />
-      {texto}
+      Último Debe
+      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${estilo}`}>
+        {atrasada && (
+          <span aria-hidden="true" className="grid place-items-center h-3.5 w-3.5 rounded-full bg-debe text-white text-[10px] font-bold leading-none">!</span>
+        )}
+        {cuando}
+        {atrasada && <span className="sr-only">(atrasado)</span>}
+      </span>
     </span>
   )
 }

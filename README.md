@@ -17,7 +17,7 @@ Cuenta corriente digital para un negocio de reventa de zapatillas: reemplaza el 
 - **Movimientos Debe / Haber** por cliente, mostrados como una **cuenta T** (Debe a la izquierda, Haber a la derecha); se cargan con dos botones a mano y se editan tocándolos
 - **Saldo automático** por cliente y **total a cobrar** del negocio
 - **Debe y Haber del mes** (y del mes anterior), para ver si la deuda total crece o baja
-- **Antigüedad de la deuda:** días desde el último Debe, con color según urgencia (hasta 7 días, hasta 30, más de 30)
+- **Antigüedad de la deuda:** días desde el último Debe, con una etiqueta según urgencia (hasta 7 días, hasta 30, y más de 30 marcada como atrasada), que se distingue también sin depender del color
 - **Estado de cuenta para el cliente:** una imagen con el saldo y el desglose renglón por renglón (fecha, detalle, Debe, Haber y saldo acumulado), lista para compartir por WhatsApp. Si la cuenta quedó saldada alguna vez, arranca desde ahí: muestra lo pendiente, no todo el historial
 - **Filtro por período** y paginación ("Ver movimientos anteriores")
 - **Fechas siempre en horario de Argentina**, esté donde esté el dispositivo
