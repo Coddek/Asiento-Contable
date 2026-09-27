@@ -39,7 +39,7 @@ export default function Login() {
         <div className="h-11 w-11 rounded-full bg-stone-900 flex items-center justify-center text-white font-semibold mb-6">
           $
         </div>
-        <h1 className="text-2xl font-semibold text-stone-900 tracking-tight mb-1">Cuentas</h1>
+        <h1 className="text-2xl font-semibold text-stone-900 tracking-tight mb-1">Asiento Contable</h1>
         <p className="text-stone-400 text-sm mb-7">
           {modo === 'ingresar' ? 'Ingresá para ver tus clientes' : 'Creá tu cuenta'}
         </p>

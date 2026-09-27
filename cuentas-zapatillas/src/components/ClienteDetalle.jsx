@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import ConfirmDialog from './ConfirmDialog'
 import Toast from './Toast'
 import Spinner from './Spinner'
 import { useToast } from '../hooks/useToast'
+import { hoyArgentina } from '../lib/fecha'
+import { generarImagen, compartirArchivo } from '../lib/compartirImagen'
+import EstadoCuenta from './EstadoCuenta'
+import { armarEstado } from '../lib/estadoCuenta'
 
 const PAGE_SIZE = 20
 
@@ -19,7 +23,16 @@ function SkeletonRow() {
   )
 }
 
-export default function ClienteDetalle({ cliente, onVolver }) {
+export default function ClienteDetalle({ cliente: clienteInicial, onVolver }) {
+  const [cliente, setCliente] = useState(clienteInicial)
+  const [modalCliente, setModalCliente] = useState(false)
+  const [formCliente, setFormCliente] = useState({ nombre: '', telefono: '', notas: '' })
+  const [borrandoCliente, setBorrandoCliente] = useState(false)
+  // Estado de cuenta: se arma recién al tocar el botón (ver compartirImagen.js)
+  const estadoRef = useRef(null)
+  const [estado, setEstado] = useState(null)
+  const [preparando, setPreparando] = useState(false)
+  const [imagenLista, setImagenLista] = useState(null)
   const [movimientos, setMovimientos] = useState([])
   const [loading, setLoading] = useState(true)
   const [cargandoMas, setCargandoMas] = useState(false)
@@ -37,7 +50,7 @@ export default function ClienteDetalle({ cliente, onVolver }) {
   const [fechaHasta, setFechaHasta] = useState('')
 
   // Form movimiento
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
+  const [fecha, setFecha] = useState(hoyArgentina())
   const [referencia, setReferencia] = useState('')
   const [monto, setMonto] = useState('')
   const [tipo, setTipo] = useState('debe')
@@ -110,6 +123,7 @@ export default function ClienteDetalle({ cliente, onVolver }) {
     }
 
     cerrarModal()
+    setImagenLista(null)
     showToast(editando ? 'Movimiento actualizado' : 'Movimiento agregado')
     cargarTodo()
   }
@@ -126,16 +140,103 @@ export default function ClienteDetalle({ cliente, onVolver }) {
   async function confirmarEliminarMovimiento() {
     const id = movimientoABorrar
     setMovimientoABorrar(null)
-    await supabase.from('movimientos').delete().eq('id', id)
+    const { error } = await supabase.from('movimientos').delete().eq('id', id)
+    if (error) {
+      showToast('No se pudo eliminar el movimiento', 'error')
+      return
+    }
     showToast('Movimiento eliminado')
+    setImagenLista(null)
     cargarTodo()
+  }
+
+  function abrirEditarCliente() {
+    setFormCliente({ nombre: cliente.nombre, telefono: cliente.telefono || '', notas: cliente.notas || '' })
+    setErrorForm('')
+    setModalCliente(true)
+  }
+
+  async function guardarCliente(e) {
+    e.preventDefault()
+    if (!formCliente.nombre.trim()) return
+    setGuardando(true)
+    setErrorForm('')
+    const cambios = {
+      nombre: formCliente.nombre.trim(),
+      telefono: formCliente.telefono.trim() || null,
+      notas: formCliente.notas.trim() || null,
+    }
+    const { error } = await supabase.from('clientes').update(cambios).eq('id', cliente.id)
+    setGuardando(false)
+    if (error) {
+      setErrorForm('No se pudo guardar. Probá de nuevo.')
+      return
+    }
+    setCliente({ ...cliente, ...cambios })
+    setImagenLista(null)
+    setModalCliente(false)
+    showToast('Cliente actualizado')
+  }
+
+  async function eliminarCliente() {
+    setBorrandoCliente(false)
+    const { error } = await supabase.from('clientes').delete().eq('id', cliente.id)
+    if (error) {
+      showToast('No se pudo eliminar el cliente', 'error')
+      return
+    }
+    onVolver()
+  }
+
+  // Si la imagen ya está armada (segundo toque en iPhone), la manda directo.
+  // Si no, trae todos los movimientos (sin el filtro de fechas), dibuja el
+  // estado fuera de pantalla y en el efecto de abajo le saca la foto.
+  async function compartirEstado() {
+    if (imagenLista) {
+      avisar(await compartirArchivo(imagenLista))
+      return
+    }
+    setPreparando(true)
+    const { data, error } = await supabase
+      .from('movimientos')
+      .select('fecha, referencia, debe, haber, created_at')
+      .eq('cliente_id', cliente.id)
+    if (error) {
+      setPreparando(false)
+      showToast('No se pudo armar el estado de cuenta', 'error')
+      return
+    }
+    setEstado({ ...armarEstado(data), fecha: hoyArgentina() })
+  }
+
+  useEffect(() => {
+    if (!estado || !preparando || !estadoRef.current) return
+    const nombre = `estado-de-cuenta-${cliente.nombre.trim().toLowerCase().replace(/\s+/g, '-')}.png`
+    generarImagen(estadoRef.current, nombre)
+      .then(async (archivo) => {
+        setImagenLista(archivo)
+        setPreparando(false)
+        avisar(await compartirArchivo(archivo))
+      })
+      .catch(() => {
+        setPreparando(false)
+        showToast('No se pudo armar la imagen', 'error')
+      })
+    // Solo cuando llegan datos nuevos del estado de cuenta (lo dispara compartirEstado).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado])
+
+  function avisar(resultado) {
+    if (resultado === 'descargada') showToast('Imagen descargada')
+    if (resultado === 'reintentar') showToast('Imagen lista: tocá "Enviar imagen"')
+    if (resultado === 'error') showToast('No se pudo abrir el menú de compartir', 'error')
   }
 
   const hayFiltro = fechaDesde || fechaHasta
   const modalAbierto = modalNuevo || modalEditar
 
   function abrirNuevo() {
-    setFecha(new Date().toISOString().split('T')[0])
+    setFecha(hoyArgentina())
     setReferencia(''); setMonto(''); setTipo('debe')
     setErrorForm('')
     setModalNuevo(true)
@@ -144,7 +245,7 @@ export default function ClienteDetalle({ cliente, onVolver }) {
   function cerrarModal() {
     setModalNuevo(false); setModalEditar(null); setGuardando(false)
     setMonto(''); setReferencia(''); setTipo('debe')
-    setFecha(new Date().toISOString().split('T')[0])
+    setFecha(hoyArgentina())
   }
 
   return (
@@ -163,7 +264,7 @@ export default function ClienteDetalle({ cliente, onVolver }) {
       <main className="max-w-2xl mx-auto px-5 py-8 pb-14">
         {/* Cliente + saldo (header editorial, sin caja) */}
         <div className="flex items-end justify-between mb-6 pb-6 border-b border-stone-200">
-          <div>
+          <div className="min-w-0">
             <p className="font-semibold text-xl text-stone-900 tracking-tight">{cliente.nombre}</p>
             {cliente.telefono && <p className="text-sm text-stone-400 mt-0.5">{cliente.telefono}</p>}
           </div>
@@ -175,14 +276,40 @@ export default function ClienteDetalle({ cliente, onVolver }) {
           </div>
         </div>
 
+        {cliente.notas && (
+          <p className="text-sm text-stone-600 bg-white border border-stone-200 rounded-2xl px-4 py-3 mb-4 whitespace-pre-line">
+            {cliente.notas}
+          </p>
+        )}
+
+        {/* Acciones del cliente */}
+        <div className="mb-6">
+          <button
+            onClick={compartirEstado}
+            disabled={preparando}
+            className="w-full bg-white border border-stone-200 text-stone-900 rounded-full px-4 py-2.5 text-[13px] font-medium hover:bg-stone-50 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+          >
+            {preparando && <Spinner className="w-3.5 h-3.5" />}
+            {preparando ? 'Preparando...' : imagenLista ? 'Enviar imagen' : 'Compartir estado de cuenta'}
+          </button>
+          <div className="flex justify-center gap-4 mt-1">
+            <button onClick={abrirEditarCliente} className="text-[13px] text-stone-500 hover:text-stone-900 px-2 py-2 transition-colors">
+              Editar cliente
+            </button>
+            <button onClick={() => setBorrandoCliente(true)} className="text-[13px] text-stone-400 hover:text-rose-600 px-2 py-2 transition-colors">
+              Eliminar cliente
+            </button>
+          </div>
+        </div>
+
         {/* Filtro fechas — fila liviana, sin tarjeta */}
         <div className="flex items-center gap-2 mb-5 text-sm">
-          <span className="text-stone-400 text-xs shrink-0 uppercase tracking-wide">Período</span>
-          <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)}
-            className="border border-stone-200 rounded-full px-3 py-1.5 text-[13px] outline-none text-stone-900 bg-white transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300" />
+          <span className="hidden sm:inline text-stone-400 text-xs shrink-0 uppercase tracking-wide">Período</span>
+          <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} aria-label="Desde"
+            className="min-w-0 flex-1 border border-stone-200 rounded-full px-3 py-1.5 text-[13px] outline-none text-stone-900 bg-white transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300" />
           <span className="text-stone-300">—</span>
-          <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)}
-            className="border border-stone-200 rounded-full px-3 py-1.5 text-[13px] outline-none text-stone-900 bg-white transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300" />
+          <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} aria-label="Hasta"
+            className="min-w-0 flex-1 border border-stone-200 rounded-full px-3 py-1.5 text-[13px] outline-none text-stone-900 bg-white transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300" />
           {hayFiltro && (
             <button onClick={() => { setFechaDesde(''); setFechaHasta('') }}
               className="text-stone-400 hover:text-stone-600 text-lg leading-none p-1 bg-transparent border-none cursor-pointer transition-colors">
@@ -231,11 +358,12 @@ export default function ClienteDetalle({ cliente, onVolver }) {
                         {Number(m.debe) > 0 ? 'debe' : 'pagó'}
                       </p>
                     </div>
-                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => abrirEditar(m)} className="text-stone-300 hover:text-stone-600 p-1.5 bg-transparent border-none cursor-pointer text-sm">
+                    {/* Siempre visibles: en el celu no hay "pasar el mouse" */}
+                    <div className="flex gap-0.5">
+                      <button onClick={() => abrirEditar(m)} aria-label="Editar movimiento" className="text-stone-400 hover:text-stone-700 p-2 bg-transparent border-none cursor-pointer text-sm">
                         ✎
                       </button>
-                      <button onClick={() => setMovimientoABorrar(m.id)} className="text-stone-300 hover:text-rose-600 p-1.5 bg-transparent border-none cursor-pointer text-lg leading-none">
+                      <button onClick={() => setMovimientoABorrar(m.id)} aria-label="Eliminar movimiento" className="text-stone-400 hover:text-rose-600 p-2 bg-transparent border-none cursor-pointer text-lg leading-none">
                         ×
                       </button>
                     </div>
@@ -331,6 +459,68 @@ export default function ClienteDetalle({ cliente, onVolver }) {
           </div>
         </div>
       )}
+
+      {modalCliente && (
+        <div className="fixed inset-0 bg-stone-900/40 flex items-center justify-center px-4 z-50">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm">
+            <h3 className="font-semibold text-stone-900 mb-4">Editar cliente</h3>
+            <form onSubmit={guardarCliente} className="flex flex-col gap-2.5">
+              <input
+                type="text"
+                placeholder="Nombre *"
+                value={formCliente.nombre}
+                onChange={e => setFormCliente({ ...formCliente, nombre: e.target.value })}
+                required
+                className="border border-stone-200 rounded-2xl px-3.5 py-2.5 text-sm outline-none text-stone-900 transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300"
+              />
+              <input
+                type="tel"
+                placeholder="Teléfono (opcional)"
+                value={formCliente.telefono}
+                onChange={e => setFormCliente({ ...formCliente, telefono: e.target.value })}
+                className="border border-stone-200 rounded-2xl px-3.5 py-2.5 text-sm outline-none text-stone-900 transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300"
+              />
+              <textarea
+                placeholder="Notas (ej: paga los viernes, talle 42)"
+                value={formCliente.notas}
+                onChange={e => setFormCliente({ ...formCliente, notas: e.target.value })}
+                rows={3}
+                className="border border-stone-200 rounded-2xl px-3.5 py-2.5 text-sm outline-none text-stone-900 resize-none transition-shadow focus:ring-2 focus:ring-stone-200 focus:border-stone-300"
+              />
+
+              {errorForm && <p className="text-rose-600 text-sm">{errorForm}</p>}
+
+              <div className="flex gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setModalCliente(false)}
+                  className="flex-1 border border-stone-200 bg-white text-stone-500 rounded-full py-2.5 text-sm hover:bg-stone-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardando}
+                  className="flex-1 bg-stone-900 text-white rounded-full py-2.5 text-sm font-medium hover:bg-stone-800 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                >
+                  {guardando && <Spinner className="w-3.5 h-3.5" />}
+                  {guardando ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={borrandoCliente}
+        title="Eliminar cliente"
+        message="Se van a borrar el cliente y todos sus movimientos. Esta acción no se puede deshacer."
+        onConfirm={eliminarCliente}
+        onCancel={() => setBorrandoCliente(false)}
+      />
+
+      {estado && <EstadoCuenta cliente={cliente} estado={estado} fecha={estado.fecha} ref={estadoRef} />}
 
       <ConfirmDialog
         open={movimientoABorrar !== null}
