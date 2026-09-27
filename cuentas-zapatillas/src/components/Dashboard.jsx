@@ -6,6 +6,7 @@ import Spinner from './Spinner'
 import Hoja from './Hoja'
 import MarcaT from './MarcaT'
 import ErrorCarga from './ErrorCarga'
+import CampoContrasena from './CampoContrasena'
 import { useToast } from '../hooks/useToast'
 import { diasHasta, hoyArgentina, formatPesos } from '../lib/fecha'
 import { mensajeError } from '../lib/errores'
@@ -77,7 +78,7 @@ function FilaEsqueleto() {
   )
 }
 
-export default function Dashboard({ session }) {
+export default function Dashboard({ session, aviso, onAvisoVisto }) {
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
   const [errorCarga, setErrorCarga] = useState('')
@@ -91,9 +92,19 @@ export default function Dashboard({ session }) {
   const [saliendo, setSaliendo] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [tab, setTab] = useState('deben')
+  const [orden, setOrden] = useState('saldo') // 'saldo' | 'atraso'
+  const [hojaCuenta, setHojaCuenta] = useState(false)
+  const [nuevaPassword, setNuevaPassword] = useState('')
+  const [errorCuenta, setErrorCuenta] = useState('')
   const [toast, showToast] = useToast()
 
   useEffect(() => { fetchClientes() }, [])
+
+  useEffect(() => {
+    if (!aviso) return
+    showToast(aviso.texto, aviso.tipo === 'error' ? 'error' : 'ok')
+    onAvisoVisto()
+  }, [aviso, showToast, onAvisoVisto])
 
   async function fetchClientes() {
     setLoading(true)
@@ -142,6 +153,25 @@ export default function Dashboard({ session }) {
     fetchClientes()
   }
 
+  async function cambiarContrasena(e) {
+    e.preventDefault()
+    if (nuevaPassword.length < 8) {
+      setErrorCuenta('Usá al menos 8 caracteres.')
+      return
+    }
+    setGuardando(true)
+    setErrorCuenta('')
+    const { error } = await supabase.auth.updateUser({ password: nuevaPassword })
+    setGuardando(false)
+    if (error) {
+      setErrorCuenta(mensajeError(error, 'No se pudo cambiar la contraseña. Probá de nuevo.'))
+      return
+    }
+    setNuevaPassword('')
+    setHojaCuenta(false)
+    showToast('Contraseña cambiada')
+  }
+
   async function handleLogout() {
     setSaliendo(true)
     const { error } = await supabase.auth.signOut()
@@ -158,6 +188,10 @@ export default function Dashboard({ session }) {
   const filtrados = clientes
     .filter((c) => c.nombre.toLowerCase().includes(busqueda.toLowerCase()))
     .filter((c) => (tab === 'deben' ? c.saldo > 0 : c.saldo <= 0))
+  // "Más atrasado": primero a quien hace más que no se le anota un Debe.
+  if (tab === 'deben' && orden === 'atraso') {
+    filtrados.sort((a, b) => (b.diasDeuda ?? -1) - (a.diasDeuda ?? -1))
+  }
 
   const totalDeben = clientes.filter((c) => c.saldo > 0).length
   const totalSaldados = clientes.filter((c) => c.saldo <= 0).length
@@ -179,12 +213,10 @@ export default function Dashboard({ session }) {
         <div className="flex items-center gap-4">
           <span className="hidden sm:inline text-[13px] text-tinta-tenue">{session.user.email}</span>
           <button
-            onClick={handleLogout}
-            disabled={saliendo}
-            className="text-[15px] text-tinta-suave hover:text-tinta disabled:opacity-50 flex items-center gap-1.5 py-2"
+            onClick={() => { setHojaCuenta(true); setErrorCuenta(''); setNuevaPassword('') }}
+            className="text-[15px] text-tinta-suave hover:text-tinta py-2"
           >
-            {saliendo && <Spinner className="w-3.5 h-3.5" />}
-            {saliendo ? 'Saliendo...' : 'Salir'}
+            Cuenta
           </button>
         </div>
       </header>
@@ -250,6 +282,21 @@ export default function Dashboard({ session }) {
                   </button>
                 ))}
               </div>
+              {tab === 'deben' && totalDeben > 1 && (
+                <div className="flex items-center gap-2 text-[14px] text-tinta-suave">
+                  Ordenar por
+                  {[['saldo', 'Mayor saldo'], ['atraso', 'Más atrasado']].map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setOrden(key)}
+                      aria-pressed={orden === key}
+                      className={`px-3 py-1.5 rounded-full border ${orden === key ? 'border-tinta bg-tinta text-white' : 'border-renglon bg-hoja'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Lista de clientes, en renglones */}
@@ -339,6 +386,34 @@ export default function Dashboard({ session }) {
               {guardando ? 'Guardando...' : 'Guardar cliente'}
             </button>
           </form>
+        </Hoja>
+      )}
+
+      {hojaCuenta && (
+        <Hoja titulo="Tu cuenta" onCerrar={() => setHojaCuenta(false)}>
+          <p className="text-[15px] text-tinta-suave -mt-2 mb-5 break-all">{session.user.email}</p>
+
+          <form onSubmit={cambiarContrasena} className="flex flex-col gap-3">
+            <CampoContrasena etiqueta="Cambiar contraseña" value={nuevaPassword} onChange={setNuevaPassword} autoComplete="new-password" minLength={8} />
+            {errorCuenta && <p role="alert" className="text-sm text-debe bg-debe-claro rounded-xl px-3.5 py-2.5">{errorCuenta}</p>}
+            <button
+              type="submit"
+              disabled={guardando}
+              className="bg-hoja border border-renglon rounded-2xl py-3.5 text-[15px] font-medium hover:border-tinta disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {guardando && <Spinner />}
+              {guardando ? 'Guardando...' : 'Guardar contraseña nueva'}
+            </button>
+          </form>
+
+          <button
+            onClick={handleLogout}
+            disabled={saliendo}
+            className="mt-6 w-full bg-tinta text-white rounded-2xl py-4 text-[16px] font-medium hover:brightness-125 disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {saliendo && <Spinner />}
+            {saliendo ? 'Saliendo...' : 'Cerrar sesión'}
+          </button>
         </Hoja>
       )}
 

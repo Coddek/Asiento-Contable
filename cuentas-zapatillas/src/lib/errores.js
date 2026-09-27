@@ -17,8 +17,20 @@ export function mensajeError(error, respaldo = 'Algo salió mal. Probá de nuevo
   if (msg.includes('already registered') || msg.includes('already been registered')) {
     return 'Ya hay una cuenta con ese email. Ingresá con tu contraseña.'
   }
-  if (msg.includes('password') && (msg.includes('at least') || msg.includes('characters') || msg.includes('weak'))) {
-    return 'La contraseña tiene que tener al menos 6 caracteres.'
+  if (codigo === 'same_password' || msg.includes('different from the old')) {
+    return 'La contraseña nueva tiene que ser distinta de la actual.'
+  }
+  if (codigo === 'weak_password' || (msg.includes('password') && (msg.includes('at least') || msg.includes('characters') || msg.includes('weak')))) {
+    return 'Esa contraseña es muy débil. Usá al menos 8 caracteres, mezclando letras y números.'
+  }
+  if (msg.includes('pwned') || msg.includes('leaked') || msg.includes('compromised')) {
+    return 'Esa contraseña apareció en filtraciones de otros sitios. Elegí otra.'
+  }
+  if (codigo === 'reauthentication_needed' || msg.includes('reauthentication')) {
+    return 'Por seguridad, salí y volvé a ingresar antes de cambiar la contraseña.'
+  }
+  if (codigo === 'otp_expired' || (msg.includes('link') && (msg.includes('expired') || msg.includes('invalid'))) || (msg.includes('otp') && msg.includes('expired'))) {
+    return 'El link venció o ya se usó. Pedí uno nuevo.'
   }
   if (msg.includes('invalid') && msg.includes('email')) return 'Revisá el email: no parece válido.'
   if (msg.includes('rate limit') || estado === 429) return 'Demasiados intentos seguidos. Esperá unos minutos y probá de nuevo.'

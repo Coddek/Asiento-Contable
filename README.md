@@ -17,12 +17,14 @@ Cuenta corriente digital para un negocio de reventa de zapatillas: reemplaza el 
 - **Movimientos Debe / Haber** por cliente, mostrados como una **cuenta T** (Debe a la izquierda, Haber a la derecha); se cargan con dos botones a mano y se editan tocándolos
 - **Saldo automático** por cliente y **total a cobrar** del negocio
 - **Debe y Haber del mes** (y del mes anterior), para ver si la deuda total crece o baja
+- **Ordenar por mayor saldo o por más atrasado**, para saber a quién cobrarle primero
 - **Antigüedad de la deuda:** días desde el último Debe, con una etiqueta según urgencia (hasta 7 días, hasta 30, y más de 30 marcada como atrasada), que se distingue también sin depender del color
 - **Estado de cuenta para el cliente:** una imagen con el saldo y el desglose renglón por renglón (fecha, detalle, Debe, Haber y saldo acumulado), lista para compartir por WhatsApp. Si la cuenta quedó saldada alguna vez, arranca desde ahí: muestra lo pendiente, no todo el historial
 - **Filtro por período** y paginación ("Ver movimientos anteriores")
 - **Fechas siempre en horario de Argentina**, esté donde esté el dispositivo
 - **Instalable en el celular** como app (PWA), con su ícono
-- **Login propio** y datos aislados por usuario con Row Level Security
+- **Cuenta completa:** crear cuenta con confirmación por email, ingresar, "Olvidé mi contraseña" con link por email, cambiar la contraseña y cerrar sesión desde la app; contraseñas con botón "Mostrar" y links vencidos explicados
+- **Datos aislados por usuario** con Row Level Security
 - **Errores en lenguaje claro:** sin conexión, sesión vencida, datos inválidos o un login fallido se explican con qué pasó y qué hacer, nunca con el error técnico
 
 ## Stack
@@ -38,6 +40,15 @@ Cuenta corriente digital para un negocio de reventa de zapatillas: reemplaza el 
 - **Pensada para el celular y para cualquiera.** Las acciones principales están abajo, al alcance del pulgar; los formularios suben desde abajo como en una app nativa; cada movimiento se edita tocándolo (en una pantalla táctil no hay "pasar el mouse"). Los textos usan palabras simples y sirven para cualquier comercio.
 - **Identidad tomada de la contabilidad.** El diseño sale del libro contable: papel de libro mayor, tinta azul para el texto, rojo para el Debe y verde para el Haber, y la cuenta T como elemento central (también es el ícono de la app).
 - **La imagen se arma en el dispositivo.** El estado de cuenta se dibuja con los mismos componentes de la app y se convierte en PNG en el celular (html-to-image), recién al tocar "Compartir", para no cargar el teléfono de trabajo innecesario. Se comparte con el menú nativo del sistema (Web Share API).
+
+## Seguridad
+
+- **Cada usuario ve solo lo suyo, garantizado por la base.** Políticas RLS solo para usuarios con sesión (`TO authenticated`); sin sesión no hay acceso a ninguna tabla. Las políticas usan `(select auth.uid())`, como recomienda el linter de Supabase.
+- **La base valida los datos, no solo la app:** montos no negativos, cada movimiento es Debe *o* Haber (nunca los dos), largos máximos de nombre, teléfono, notas y detalle. El dueño de un cliente nuevo se completa solo con el usuario de la sesión.
+- **Sin permisos de más:** se sacaron los permisos que no se usan (por ejemplo `TRUNCATE`, que saltea RLS) y las funciones internas no se pueden llamar sin sesión. Ver [`supabase/seguridad.sql`](supabase/seguridad.sql).
+- **Encabezados de seguridad** en Vercel ([`vercel.json`](cuentas-zapatillas/vercel.json)): Content-Security-Policy estricta, sin iframes de terceros (`frame-ancestors 'none'`), `nosniff`, `Referrer-Policy` y `Permissions-Policy`. `npm run preview` usa los mismos encabezados para probarlos antes de publicar.
+- **Recuperación de contraseña sin filtrar datos:** el aviso es el mismo exista o no la cuenta, así no se puede averiguar qué emails están registrados.
+- **Errores en lenguaje claro,** nunca el detalle técnico.
 
 ## Correr el proyecto localmente
 
