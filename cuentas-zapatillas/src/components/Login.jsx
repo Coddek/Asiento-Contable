@@ -14,7 +14,7 @@ const volverA = () => window.location.origin
 
 const TEXTOS = {
   ingresar: { bajada: 'Las cuentas corrientes de tus clientes: quién te debe y cuánto.', boton: 'Ingresar' },
-  crear: { bajada: 'Creá tu cuenta con tu email y una contraseña de al menos 8 caracteres.', boton: 'Crear cuenta' },
+  crear: { bajada: 'Creá tu cuenta con tu email y una contraseña de al menos 8 caracteres, con letras y números.', boton: 'Crear cuenta' },
   olvide: { bajada: 'Escribí tu email y te mandamos un link para elegir una contraseña nueva.', boton: 'Mandarme el link' },
 }
 

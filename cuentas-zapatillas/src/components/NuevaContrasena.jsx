@@ -14,8 +14,8 @@ export default function NuevaContrasena({ onListo }) {
 
   async function guardar(e) {
     e.preventDefault()
-    if (password.length < 8) {
-      setError('Usá al menos 8 caracteres.')
+    if (password.length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+      setError('Usá al menos 8 caracteres, con letras y números.')
       return
     }
     setGuardando(true)
@@ -34,7 +34,7 @@ export default function NuevaContrasena({ onListo }) {
       <div className="w-full max-w-sm">
         <MarcaT className="h-12 w-12 mb-6" />
         <h1 className="font-titulo text-[34px] font-semibold leading-tight tracking-tight mb-2">Contraseña nueva</h1>
-        <p className="text-[16px] text-tinta-suave mb-8">Elegí una contraseña de al menos 8 caracteres. Con esta vas a ingresar de ahora en más.</p>
+        <p className="text-[16px] text-tinta-suave mb-8">Elegí una contraseña de al menos 8 caracteres, con letras y números. Con esta vas a ingresar de ahora en más.</p>
 
         <form onSubmit={guardar} className="flex flex-col gap-3">
           <CampoContrasena etiqueta="Contraseña nueva" value={password} onChange={setPassword} autoComplete="new-password" minLength={8} autoFocus />

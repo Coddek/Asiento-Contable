@@ -21,7 +21,7 @@ export function mensajeError(error, respaldo = 'Algo salió mal. Probá de nuevo
     return 'La contraseña nueva tiene que ser distinta de la actual.'
   }
   if (codigo === 'weak_password' || (msg.includes('password') && (msg.includes('at least') || msg.includes('characters') || msg.includes('weak')))) {
-    return 'Esa contraseña es muy débil. Usá al menos 8 caracteres, mezclando letras y números.'
+    return 'La contraseña tiene que tener al menos 8 caracteres, con letras y números.'
   }
   if (msg.includes('pwned') || msg.includes('leaked') || msg.includes('compromised')) {
     return 'Esa contraseña apareció en filtraciones de otros sitios. Elegí otra.'

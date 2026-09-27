@@ -155,8 +155,8 @@ export default function Dashboard({ session, aviso, onAvisoVisto }) {
 
   async function cambiarContrasena(e) {
     e.preventDefault()
-    if (nuevaPassword.length < 8) {
-      setErrorCuenta('Usá al menos 8 caracteres.')
+    if (nuevaPassword.length < 8 || !/[a-zA-Z]/.test(nuevaPassword) || !/\d/.test(nuevaPassword)) {
+      setErrorCuenta('Usá al menos 8 caracteres, con letras y números.')
       return
     }
     setGuardando(true)
